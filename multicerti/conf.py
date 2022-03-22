@@ -32,6 +32,11 @@ class Conf(OrderedDict):
         return conf
 
     @classmethod
+    def is_docker(cls):
+        return os.path.exists('/.dockerenv') or \
+            any('docker' in line for line in open('/proc/self/cgroup'))
+
+    @classmethod
     def load(cls, path):
         with open(path) as fp:
             conf_str = fp.read()
@@ -92,7 +97,7 @@ class Conf(OrderedDict):
         for command in ('status', 'start', 'reload'):
             key = 'nginx_%s' % command
             if key not in self:
-                if sysname == 'Linux':
+                if sysname == 'Linux' and not self.is_docker():
                     self[key] = ('systemctl', command, 'nginx')
                 else:
                     self[key] = ('service', 'nginx', command)
