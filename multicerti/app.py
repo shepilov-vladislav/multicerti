@@ -7,8 +7,8 @@ import pprint
 import sys
 
 def cmd(*args, **kwargs):
-    return subprocess.check_call(args, **kwargs)   
-            
+    return subprocess.check_call(args, **kwargs)
+
 class App(object):
 
     def __init__(self, conf):
@@ -18,7 +18,7 @@ class App(object):
             pprint.pprint(exc.error_details, stream = sys.stderr)
             sys.stderr.flush()
             sys.exit(1)
-        
+
     def nginx_conf(self):
         vhosts = self._conf['vhosts']
         upstreams = ''.join(vhost.upstream_block() for vhost in vhosts)
@@ -32,7 +32,7 @@ class App(object):
                 }
             )
         )
-            
+
     def _install_certificates(self):
         vhosts = self._conf['vhosts']
         ssl_vhosts = [
@@ -42,13 +42,21 @@ class App(object):
         ]
         for vhost in ssl_vhosts:
             cmd('mkdir', '-p', vhost.letsencrypt_webroot())
-            cmd('certbot', 'certonly', '--noninteractive', '--agree-tos', '--webroot',
-                '--expand', # so that we're not asked if we want to expand
-                '-m', vhost.registration_email,
-                '-w', vhost.letsencrypt_webroot(),
-                '-d', ','.join(vhost.domains)
-            )
-    
+            try:
+                cmd('certbot', 'certonly', '--noninteractive', '--agree-tos', '--webroot',
+                    '--expand', # so that we're not asked if we want to expand
+                    '-m', vhost.registration_email,
+                    '-w', vhost.letsencrypt_webroot(),
+                    '-d', ','.join(vhost.domains)
+                )
+            except subprocess.CalledProcessError as err:
+                print(err.output)
+                try:
+                    with open("/var/log/letsencrypt/letsencrypt.log") as fp:
+                        print(fp.read())
+                except FileNotFoundError:
+                    print("/var/log/letsencrypt/letsencrypt.log not found")
+
     def update_nginx_conf(self):
         temp_path = to_tempfile(self.nginx_conf(), prefix = self._conf['nginx_conf_location'] + ".")
         cmd(self._conf['nginx'], '-qt', '-c', temp_path) # check the conf before overwriting
@@ -59,7 +67,7 @@ class App(object):
             cmd(*self._conf['nginx_start'])
         else:
             cmd(*self._conf['nginx_reload'])
-            
+
     def update_certs(self):
         self.update_nginx_conf()
         self._install_certificates()
